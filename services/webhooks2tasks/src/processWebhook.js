@@ -8,6 +8,7 @@ import { sendToAmazeeioLogs } from '@amazeeio/amazeeio-logs';
 import githubPullRequestClosed from './handlers/githubPullRequestClosed';
 import githubBranchDeleted from './handlers/githubBranchDeleted';
 import githubPush from './handlers/githubPush';
+import githubPullRequestOpened from './handlers/githubPullRequestOpened';
 
 import type { WebhookRequestData, ChannelWrapper, RabbitMQMsg, SiteGroup } from './types';
 
@@ -82,7 +83,9 @@ export default async function processWebhook (rabbitMsg: RabbitMQMsg, channelWra
           case 'closed':
             await handle(githubPullRequestClosed, webhook, siteGroup, `${webhooktype}:${event}:${body.action}`)
             break;
-
+          case 'closed':
+            await handle(githubPullRequestOpened, webhook, siteGroup, `${webhooktype}:${event}:${body.action}`)
+            break;
           default:
             unhandled(webhook, siteGroup, `${webhooktype}:${event}:${body.action}`)
             break;

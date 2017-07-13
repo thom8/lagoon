@@ -5,7 +5,7 @@ FROM amazeeio/centos7-node-builder:6 as node-packages
 # This is necessary as with the current docker context we can't reach files from top level directories.
 
 # if GIT_SHA is not set (like we are locally, we fall back to the develop branch)
-ARG AMAZEEIO_GIT_SHA=origin/develop
+ARG AMAZEEIO_GIT_SHA=origin/AMAZEEIO-828-deploy-on-github-pull-request
 RUN git init . && \
     git config remote.origin.url https://d3b4ce2e61fc43cbc6eaa96dfe72a92c480c813d@github.com/amazeeio/lagoon.git && \
     git fetch https://d3b4ce2e61fc43cbc6eaa96dfe72a92c480c813d@github.com/amazeeio/lagoon.git +refs/heads/*:refs/remotes/origin/* && \
