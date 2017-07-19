@@ -83,7 +83,7 @@ export default async function processWebhook (rabbitMsg: RabbitMQMsg, channelWra
           case 'closed':
             await handle(githubPullRequestClosed, webhook, siteGroup, `${webhooktype}:${event}:${body.action}`)
             break;
-          case 'closed':
+          case 'opened':
             await handle(githubPullRequestOpened, webhook, siteGroup, `${webhooktype}:${event}:${body.action}`)
             break;
           default:

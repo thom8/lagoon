@@ -27,6 +27,10 @@ export default async function githubPullRequestOpened(webhook: WebhookRequestDat
       prNumber: body.number
     }
 
+    const sha = body.pull_request.head.sha
+    const branchName = body.pull_request.head.repo.default_branch
+
+
     const data: deployData = {
       siteGroupName: siteGroup.siteGroupName,
       type: 'pull_request',
@@ -50,7 +54,7 @@ export default async function githubPullRequestOpened(webhook: WebhookRequestDat
         case "NoNeedToDeployBranch":
           // These are not real errors and also they will happen many times. We just log them locally but not throw an error
           sendToAmazeeioLogs('info', siteGroup.siteGroupName, uuid, `${webhooktype}:${event}:handledButNoTask`, meta,
-            `*[${siteGroup.siteGroupName}]* ${logMessage}. No deploy task created, reason: ${error}`
+            `*[${siteGroup.siteGroupName}]* No deploy task created, reason: ${error}`
           )
           return;
 
