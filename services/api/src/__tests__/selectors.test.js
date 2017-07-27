@@ -241,6 +241,12 @@ describe('Site related selectors', () => {
             uid: 3201,
             sitegroup: 'deploytest',
           },
+          // deploytest_branch2: {
+          //   site_environment: 'production',
+          //   site_branch: 'branch2',
+          //   uid: 5000,
+          //   sitegroup: 'deploytest',
+          // },
         },
         'amazeeio::servername': 'arbitraryServerName',
         'drupalhosting::profiles::nginx_backend::cluster_member': {

@@ -7,7 +7,7 @@ import type {
   SiteGroup,
   SshKey,
   SshKeys,
-  State,
+  State
 } from './types';
 
 const R = require('ramda');
@@ -23,11 +23,11 @@ const R = require('ramda');
 
 // TODO: Type spread is broken for autocompletion for some reason >:(
 export type ClientView = Client & {
-  clientName: string,
+  clientName: string
 };
 
 export type SiteGroupView = SiteGroup & {
-  siteGroupName: string,
+  siteGroupName: string
 };
 
 export type SiteView = Site & {
@@ -38,15 +38,15 @@ export type SiteView = Site & {
   fileName: string,
   serverInfrastructure: string,
   serverIdentifier: string,
-  serverNames: Array<string>,
+  serverNames: Array<string>
 };
 
 type FilterCriteria = {
-  [key: string]: Function | mixed,
+  [key: string]: Function | mixed
 };
 
 type WhereCriteria = {
-  [key: string]: Function,
+  [key: string]: Function
 };
 
 // ==== Utility
@@ -61,17 +61,17 @@ const sanitizeCriteria /*: (FilterCriteria) => WhereCriteria */ = R.compose(
       // Functions are already predicates
       R.identity,
       // otherwise make a predicate out of the value
-      R.always(R.equals(val)),
-    )(val),
+      R.always(R.equals(val))
+    )(val)
   ]),
   R.toPairs,
-  R.pickBy(R.compose(R.not, R.isNil)),
+  R.pickBy(R.compose(R.not, R.isNil))
 );
 
 // A util to sanitize criteria before applying it to a where condition
 const whereCriteria /* : (FilterCriteria) => Function */ = R.compose(
   R.where,
-  sanitizeCriteria,
+  sanitizeCriteria
 );
 
 const findAll = (criteria: FilterCriteria) => R.filter(whereCriteria(criteria));
@@ -82,11 +82,11 @@ const findFirst = (criteria: FilterCriteria) => R.find(whereCriteria(criteria));
 const serverNamesLens = R.lensProp('serverNames');
 
 const parseServerInfo = (
-  fileName: string,
+  fileName: string
 ): {
   fileName: string,
   serverInfrastructure: string,
-  serverIdentifier: string,
+  serverIdentifier: string
 } =>
   R.compose(
     R.ifElse(
@@ -95,11 +95,11 @@ const parseServerInfo = (
       matches => ({
         fileName,
         serverInfrastructure: matches[1],
-        serverIdentifier: matches[2],
-      }),
+        serverIdentifier: matches[2]
+      })
     ),
     R.match(/([^/]+)\/([^/.]+)\.[^/.]+$/),
-    R.defaultTo(''),
+    R.defaultTo('')
   )(fileName);
 
 const addServerInfo /* :
@@ -111,7 +111,7 @@ const addServerInfo /* :
   } */ = obj =>
   R.compose(
     R.ifElse(R.isNil, () => obj, R.merge(obj)),
-    R.compose(parseServerInfo, R.prop('fileName')),
+    R.compose(parseServerInfo, R.prop('fileName'))
   )(obj);
 
 // TODO: For now, if not all parameters are provided, the
@@ -126,33 +126,33 @@ const toSiteHostStr /* :
     R.compose(
       // (val) => val.length > 1,
       R.lt(1),
-      R.length,
+      R.length
     ),
     R.join('.'),
-    R.compose(R.always('')),
+    R.compose(R.always(''))
   ),
   R.values,
-  R.pick(['serverIdentifier', 'serverInfrastructure']),
+  R.pick(['serverIdentifier', 'serverInfrastructure'])
 );
 
 const addSiteHost = (
   // ==> SiteFile -> amazeeio::servername
   servername: null | string | Array<string>,
-  site: SiteView & { serverIdentifier: string, serverInfrastructure: string },
+  site: SiteView & { serverIdentifier: string, serverInfrastructure: string }
 ): SiteView =>
   R.compose(obj =>
     R.cond([
       [
         // servername comes from the upper context siteFile['amazeeio::servername']
         () => servername != null,
-        R.set(R.lensProp('siteHost'), servername),
+        R.set(R.lensProp('siteHost'), servername)
       ],
       [
         R.and(R.has('serverIdentifier'), R.has('serverInfrastructure')),
-        R.set(R.lensProp('siteHost'), toSiteHostStr(obj)),
+        R.set(R.lensProp('siteHost'), toSiteHostStr(obj))
       ],
-      [R.T, R.identity],
-    ])(obj),
+      [R.T, R.identity]
+    ])(obj)
   )(site);
 
 const computeServerNames /*: (obj: {
@@ -169,14 +169,14 @@ const computeServerNames /*: (obj: {
         R.compose(
           // { backend1: 10.0.0.1 } => "backend1.mySiteHost"
           R.map(([key]) => `${key}.${siteHost}`),
-          R.toPairs,
-        )(clusterMembers),
+          R.toPairs
+        )(clusterMembers)
     ],
 
     // Case 2 - If obj represents single instances
     [
       R.compose(R.equals('single'), R.prop('serverInfrastructure')),
-      obj => [`backend.${obj.siteHost}`],
+      obj => [`backend.${obj.siteHost}`]
     ],
 
     // Case 3 - use siteHost as serverNames instead
@@ -185,33 +185,33 @@ const computeServerNames /*: (obj: {
       R.ifElse(
         R.compose(R.is(Array), R.prop('siteHost')),
         R.prop('siteHost'),
-        R.compose(R.of, R.prop('siteHost')),
-      ),
-    ],
-  ],
+        R.compose(R.of, R.prop('siteHost'))
+      )
+    ]
+  ]
 );
 
 // Adds the computed 'serverNames' attribute to given SiteView object
 const addServerNames = (
   // ==> SiteFile -> drupalhosting::profiles::nginx_backend::cluster_member
   clusterMembers: ?{ [string]: string },
-  site: SiteView,
+  site: SiteView
 ): SiteView =>
   R.set(
     serverNamesLens,
     computeServerNames({
       serverInfrastructure: site.serverInfrastructure,
       siteHost: site.siteHost,
-      clusterMembers,
+      clusterMembers
     }),
-    site,
+    site
   );
 
 const maybeAddJumpHostKey = (jumpHost?: string, obj: Object): Object =>
   R.ifElse(
     () => R.isNil(jumpHost),
     () => R.identity(obj),
-    () => R.set(R.lensProp('jumpHost'), jumpHost, obj),
+    () => R.set(R.lensProp('jumpHost'), jumpHost, obj)
   )(obj);
 
 const extractSshKeys: ({ +ssh_keys?: SshKeys }) => Array<SshKey> = R.compose(
@@ -221,23 +221,23 @@ const extractSshKeys: ({ +ssh_keys?: SshKeys }) => Array<SshKey> = R.compose(
   // -> Array<SshKey>
   R.map(R.prop(1)),
   Object.entries,
-  R.propOr({}, 'ssh_keys'),
+  R.propOr({}, 'ssh_keys')
 );
 
 const getSshKeysFromClients /* State => Array<string> */ = R.compose(
   R.flatten,
-  R.map(extractSshKeys),
+  R.map(extractSshKeys)
 );
 
 const getAllSiteGroups /* : (State) => Array<SiteGroupView> */ = R.compose(
   R.map(([id, siteGroup]) => ({ ...siteGroup, siteGroupName: id })),
   Object.entries,
-  R.pathOr({}, ['siteGroupsFile', 'amazeeio_sitegroups']),
+  R.pathOr({}, ['siteGroupsFile', 'amazeeio_sitegroups'])
 );
 
 const filterSiteGroups = (
   criteria: FilterCriteria,
-  state: State,
+  state: State
 ): Array<SiteGroupView> =>
   R.compose(findAll(criteria), getAllSiteGroups)(state);
 
@@ -247,46 +247,59 @@ const findSiteGroup = (criteria: FilterCriteria, state: State): SiteGroupView =>
 // Utility for converting actual siteFile content w/ fileName to a SiteView object
 const siteFileToSiteViews = (
   fileName: string,
-  siteFile: SiteFile,
-): Array<SiteView> =>
-  R.compose(
+  siteFile: SiteFile
+): Array<SiteView> => {
+  const transducer = R.pipe(
     R.map(site =>
       R.apply(addServerNames, [
         R.prop(
           'drupalhosting::profiles::nginx_backend::cluster_member',
-          siteFile,
+          siteFile
         ),
-        site,
-      ]),
+        site
+      ])
     ),
     R.map(site =>
-      R.apply(addSiteHost, [R.prop('amazeeio::servername', siteFile), site]),
+      R.apply(addSiteHost, [R.prop('amazeeio::servername', siteFile), site])
     ),
     R.map(site =>
       R.assoc(
         'id',
         `${site.serverIdentifier}.${site.serverInfrastructure}/${site.siteName}`,
-        site,
-      ),
+        site
+      )
     ),
     R.map(addServerInfo),
     R.map(site =>
       R.apply(maybeAddJumpHostKey, [
         R.prop('amazeeio::jumphost', siteFile),
-        site,
-      ]),
+        site
+      ])
     ),
     // -> Array<SiteView>
     // Add siteFile related information in each site object
     R.map(([siteName, site]) =>
       R.merge(site, {
         fileName,
-        siteName,
-      }),
-    ),
+        siteName
+      })
+    )
+  );
+
+  const accFn = R.flip(R.append);
+
+  return R.compose(
+    R.transduce(transducer, accFn, []),
+    // R.tap(console.log),
     R.toPairs,
-    R.prop('drupalsites'),
+    R.prop('drupalsites')
   )(siteFile);
+};
+
+//     R.compose(
+// R.toPairs,
+// R.prop('drupalsites'),
+// )
 
 // TODO: ADD TESTS
 const getAllSites /* : (State) => Array<SiteView> */ = R.compose(
@@ -295,7 +308,7 @@ const getAllSites /* : (State) => Array<SiteView> */ = R.compose(
   R.map(([fileName, siteFile]) => siteFileToSiteViews(fileName, siteFile)),
   // Get all names and yaml contents of all files
   R.toPairs,
-  R.propOr({}, 'siteFiles'),
+  R.propOr({}, 'siteFiles')
 );
 
 const filterSites = (criteria: FilterCriteria, state: State): Array<SiteView> =>
@@ -307,12 +320,12 @@ const findSite = (criteria: FilterCriteria, state: State): SiteView =>
 const getAllClients /* : (State) => Array<ClientView> */ = R.compose(
   R.map(([id, client]) => ({ ...client, clientName: id })),
   Object.entries,
-  R.pathOr({}, ['clientsFile', 'amazeeio_clients']),
+  R.pathOr({}, ['clientsFile', 'amazeeio_clients'])
 );
 
 const filterClients = (
   criteria: FilterCriteria,
-  state: State,
+  state: State
 ): Array<ClientView> => R.compose(findAll(criteria), getAllClients)(state);
 
 const findClient = (criteria: FilterCriteria, state: State): ClientView =>
@@ -336,5 +349,5 @@ module.exports = {
   toSiteHostStr,
   addServerInfo,
   addServerNames,
-  addSiteHost,
+  addSiteHost
 };
