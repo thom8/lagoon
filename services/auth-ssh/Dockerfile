@@ -21,6 +21,9 @@ RUN rpm -Uvh --nodeps /home/openssh/*.rpm
 
 RUN yum install -y wget
 
+# We need this user as general ssh login user
+RUN adduser api -p '*'
+
 # Generate ssh server keys
 RUN mkdir /home/.ssh && \
     ssh-keygen -t rsa -f /etc/ssh/ssh_host_rsa_key -N '' && \
