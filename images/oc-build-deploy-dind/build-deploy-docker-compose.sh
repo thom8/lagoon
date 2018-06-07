@@ -12,6 +12,29 @@ function outputToYaml() {
 }
 
 ##############################################
+### RUN PRE-BUILD tasks defined in .lagoon.yml
+##############################################
+
+COUNTER=0
+while [ -n "$(cat .lagoon.yml | shyaml keys tasks.pre-build.$COUNTER 2> /dev/null)" ]
+do
+  TASK_TYPE=$(cat .lagoon.yml | shyaml keys tasks.pre-build.$COUNTER)
+  echo $TASK_TYPE
+  case "$TASK_TYPE" in
+    run)
+        COMMAND=$(cat .lagoon.yml | shyaml get-value tasks.pre-build.$COUNTER.$TASK_TYPE.command)
+        SHELL=$(cat .lagoon.yml | shyaml get-value tasks.pre-build.$COUNTER.$TASK_TYPE.shell sh)
+        su taskrunner -s /bin/${SHELL} -c "${COMMAND}"
+        ;;
+    *)
+        echo "Task Type ${TASK_TYPE} not implemented"; exit 1;
+
+  esac
+
+  let COUNTER=COUNTER+1
+done
+
+##############################################
 ### PREPARATION
 ##############################################
 

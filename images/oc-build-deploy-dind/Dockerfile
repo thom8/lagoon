@@ -9,6 +9,8 @@ RUN	mkdir -p /oc-build-deploy/git
 RUN	mkdir -p /oc-build-deploy/tug
 RUN	mkdir -p /oc-build-deploy/lagoon
 
+RUN adduser -D -g '' taskrunner
+
 WORKDIR /oc-build-deploy/git
 
 COPY docker-entrypoint.sh /lagoon/entrypoints/100-docker-entrypoint.sh
