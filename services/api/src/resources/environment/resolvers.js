@@ -743,7 +743,7 @@ const userCanSshToEnvironment = async (
   }
 
   try {
-    await hasPermission('environment', `ssh:${environment.environmentType}`, {
+    await hasPermission('environment', 'ssh:production', {
       project: environment.project,
     });
 
