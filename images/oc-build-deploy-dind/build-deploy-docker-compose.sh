@@ -47,6 +47,7 @@ COMPOSE_SERVICES=($(cat $DOCKER_COMPOSE_YAML | shyaml keys services))
 # Default shared mariadb service broker
 MARIADB_SHARED_DEFAULT_CLASS="lagoon-dbaas-mariadb-apb"
 MONGODB_SHARED_DEFAULT_CLASS="lagoon-maas-mongodb-apb"
+REDIS_SHARED_DEFAULT_CLASS="lagoon-raas-redis-apb"
 
 # Figure out which services should we handle
 SERVICE_TYPES=()
@@ -141,6 +142,19 @@ do
         MAP_SERVICE_NAME_TO_SERVICEBROKER_PLAN["${SERVICE_NAME}"]="${MONGODB_SHARED_PLAN}"
     else
         echo "defined service broker plan '${MONGODB_SHARED_PLAN}' for service '$SERVICE_NAME' and service broker '$MONGODB_SHARED_CLASS' not found in cluster";
+        exit 1
+    fi
+  fi
+
+  if [ "$SERVICE_TYPE" == "redis-shared" ]; then
+    REDIS_SHARED_CLASS=$(cat $DOCKER_COMPOSE_YAML | shyaml get-value services.$COMPOSE_SERVICE.labels.lagoon\\.redis-shared\\.class "${REDIS_SHARED_DEFAULT_CLASS}")
+    REDIS_SHARED_PLAN=$(cat $DOCKER_COMPOSE_YAML | shyaml get-value services.$COMPOSE_SERVICE.labels.lagoon\\.redis-shared\\.plan "${ENVIRONMENT_TYPE}")
+
+    # Check if the defined service broker plan  exists
+    if svcat --scope cluster get plan --class "${REDIS_SHARED_CLASS}" "${REDIS_SHARED_PLAN}" > /dev/null; then
+        MAP_SERVICE_NAME_TO_SERVICEBROKER_PLAN["${SERVICE_NAME}"]="${REDIS_SHARED_PLAN}"
+    else
+        echo "defined service broker plan '${REDIS_SHARED_PLAN}' for service '$SERVICE_NAME' and service broker '$REDIS_SHARED_CLASS' not found in cluster";
         exit 1
     fi
   fi
@@ -592,7 +606,7 @@ do
 
   case "$SERVICE_TYPE" in
 
-    mariadb-shared)
+    mariadb-shared|redis-shared)
         # ServiceBrokers take a bit, wait until the credentials secret is available
 	# We added a timeout of 10 minutes (120 retries) before exit
 	SERVICE_BROKER_COUNTER=1
@@ -611,17 +625,28 @@ do
         # Load credentials out of secret
         oc get --insecure-skip-tls-verify -n ${OPENSHIFT_PROJECT} secret ${SERVICE_NAME}-servicebroker-credentials -o yaml > /oc-build-deploy/lagoon/${SERVICE_NAME}-servicebroker-credentials.yml
         set +x
-        DB_HOST=$(cat /oc-build-deploy/lagoon/${SERVICE_NAME}-servicebroker-credentials.yml | shyaml get-value data.DB_HOST | base64 -d)
-        DB_USER=$(cat /oc-build-deploy/lagoon/${SERVICE_NAME}-servicebroker-credentials.yml | shyaml get-value data.DB_USER | base64 -d)
-        DB_PASSWORD=$(cat /oc-build-deploy/lagoon/${SERVICE_NAME}-servicebroker-credentials.yml | shyaml get-value data.DB_PASSWORD | base64 -d)
-        DB_NAME=$(cat /oc-build-deploy/lagoon/${SERVICE_NAME}-servicebroker-credentials.yml | shyaml get-value data.DB_NAME | base64 -d)
-        DB_PORT=$(cat /oc-build-deploy/lagoon/${SERVICE_NAME}-servicebroker-credentials.yml | shyaml get-value data.DB_PORT | base64 -d)
+
+        if [ "$SERVICE_TYPE" == "mariadb-shared" ]; then
+          DB_HOST=$(cat /oc-build-deploy/lagoon/${SERVICE_NAME}-servicebroker-credentials.yml | shyaml get-value data.DB_HOST | base64 -d)
+          DB_USER=$(cat /oc-build-deploy/lagoon/${SERVICE_NAME}-servicebroker-credentials.yml | shyaml get-value data.DB_USER | base64 -d)
+          DB_PASSWORD=$(cat /oc-build-deploy/lagoon/${SERVICE_NAME}-servicebroker-credentials.yml | shyaml get-value data.DB_PASSWORD | base64 -d)
+          DB_NAME=$(cat /oc-build-deploy/lagoon/${SERVICE_NAME}-servicebroker-credentials.yml | shyaml get-value data.DB_NAME | base64 -d)
+          DB_PORT=$(cat /oc-build-deploy/lagoon/${SERVICE_NAME}-servicebroker-credentials.yml | shyaml get-value data.DB_PORT | base64 -d)
+          CONFIGMAP_PATCH_DATA="{\"data\":{\"${SERVICE_NAME_UPPERCASE}_HOST\":\"${DB_HOST}\", \"${SERVICE_NAME_UPPERCASE}_USERNAME\":\"${DB_USER}\", \"${SERVICE_NAME_UPPERCASE}_PASSWORD\":\"${DB_PASSWORD}\", \"${SERVICE_NAME_UPPERCASE}_DATABASE\":\"${DB_NAME}\", \"${SERVICE_NAME_UPPERCASE}_PORT\":\"${DB_PORT}\"}}"
+        fi
+
+        if [ "$SERVICE_TYPE" == "redis-shared" ]; then
+          REDIS_HOST=$(cat /oc-build-deploy/lagoon/${SERVICE_NAME}-servicebroker-credentials.yml | shyaml get-value data.REDIS_HOST | base64 -d)
+          REDIS_SERVICE_PORT=$(cat /oc-build-deploy/lagoon/${SERVICE_NAME}-servicebroker-credentials.yml | shyaml get-value data.REDIS_SERVICE_PORT | base64 -d)
+          REDIS_CACHE_PREFIX=$(cat /oc-build-deploy/lagoon/${SERVICE_NAME}-servicebroker-credentials.yml | shyaml get-value data.REDIS_CACHE_PREFIX | base64 -d)
+          CONFIGMAP_PATCH_DATA="{\"data\":{\"${SERVICE_NAME_UPPERCASE}_HOST\":\"${REDIS_HOST}\", \"${SERVICE_NAME_UPPERCASE}_SERVICE_PORT\":\"${REDIS_SERVICE_PORT}\", \"${SERVICE_NAME_UPPERCASE}_REDIS_CACHE_PREFIX\":\"${REDIS_CACHE_PREFIX}\"}}"
+        fi
 
         # Add credentials to our configmap, prefixed with the name of the servicename of this servicebroker
         oc patch --insecure-skip-tls-verify \
           -n ${OPENSHIFT_PROJECT} \
           configmap lagoon-env \
-          -p "{\"data\":{\"${SERVICE_NAME_UPPERCASE}_HOST\":\"${DB_HOST}\", \"${SERVICE_NAME_UPPERCASE}_USERNAME\":\"${DB_USER}\", \"${SERVICE_NAME_UPPERCASE}_PASSWORD\":\"${DB_PASSWORD}\", \"${SERVICE_NAME_UPPERCASE}_DATABASE\":\"${DB_NAME}\", \"${SERVICE_NAME_UPPERCASE}_PORT\":\"${DB_PORT}\"}}"
+          -p "$CONFIGMAP_PATCH_DATA"
         set -x
         ;;
 
