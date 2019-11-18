@@ -47,6 +47,10 @@ set -x
 
 oc project --insecure-skip-tls-verify $OPENSHIFT_PROJECT
 
+# Add lagoon labels to the namespace.
+oc label namespace $OPENSHIFT_PROJECT lagoon/project=$PROJECT --overwrite
+oc label namespace $OPENSHIFT_PROJECT lagoon/environment-type=$ENVIRONMENT_TYPE --overwrite
+
 ADDITIONAL_YAMLS=($(cat .lagoon.yml | shyaml keys additional-yaml || echo ""))
 
 for ADDITIONAL_YAML in "${ADDITIONAL_YAMLS[@]}"
