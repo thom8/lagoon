@@ -989,6 +989,7 @@ else
 endif
 
 k3d: local-dev/k3d local-dev/kubectl build/docker-host
+	docker-compose up -d local-registry
 	$(info starting k3d with name $(K3D_NAME))
 	$(info Creating Loopback Interface for docker gateway if it does not exist, this might ask for sudo)
 ifeq ($(ARCH), darwin)
