@@ -1,8 +1,5 @@
 sudo: required
 services: docker
-language: python
-install:
-  - pip3 install docker
 script:
   - make build/local-registry
   - make k8s-tests
