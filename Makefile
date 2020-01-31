@@ -68,7 +68,7 @@ MINISHIFT_MEMORY := 8GB
 MINISHIFT_DISK_SIZE := 30GB
 
 # Version and Hash of the minikube cli that should be downloaded
-K3S_VERSION := v1.17.0-k3s.1
+KIND_VERSION := 0.7.0
 KUBECTL_VERSION := v1.17.0
 MINIKUBE_VERSION := 1.5.2
 MINIKUBE_PROFILE := $(CI_BUILD_TAG)-minikube
@@ -76,8 +76,8 @@ MINIKUBE_CPUS := 6
 MINIKUBE_MEMORY := 2048
 MINIKUBE_DISK_SIZE := 30g
 
-K3D_VERSION := 1.4.0
-K3D_NAME := k3s-$(CI_BUILD_TAG)
+# K3D_VERSION := 1.4.0
+KIND_NAME := $(CI_BUILD_TAG)
 
 ARCH := $(shell uname | tr '[:upper:]' '[:lower:]')
 LAGOON_VERSION := $(shell git describe --tags --exact-match 2>/dev/null || echo development)
@@ -516,7 +516,6 @@ service-images += ssh
 # Images for local helpers that exist in another folder than the service images
 localdevimages := local-git \
 									local-api-data-watcher-pusher \
-									local-registry\
 									local-dbaas-provider
 service-images += $(localdevimages)
 build-localdevimages = $(foreach image,$(localdevimages),build/$(image))
@@ -569,7 +568,7 @@ all-k8s-tests = $(foreach image,$(all-k8s-tests-list),k8s-tests/$(image))
 k8s-tests: $(all-k8s-tests)
 
 .PHONY: $(all-k8s-tests)
-$(all-k8s-tests): k3d kubernetes-test-services-up push-local-registry
+$(all-k8s-tests): kind kubernetes-test-services-up push-local-registry
 		$(eval testname = $(subst k8s-tests/,,$@))
 		IMAGE_REPO=$(CI_BUILD_TAG) docker-compose -p $(CI_BUILD_TAG) run --rm tests-kubernetes ansible-playbook --skip-tags="skip-on-kubernetes" /ansible/tests/$(testname).yaml $(testparameter)
 
@@ -622,7 +621,7 @@ main-test-services = broker logs2email logs2slack logs2rocketchat logs2microsoft
 openshift-test-services = openshiftremove openshiftbuilddeploy openshiftbuilddeploymonitor tests-openshift
 
 # Define a list of which Lagoon Services are needed for kubernetes testing
-kubernetes-test-services = kubernetesbuilddeploy kubernetesdeployqueue kubernetesbuilddeploymonitor kubernetesremove tests-kubernetes local-registry local-dbaas-provider
+kubernetes-test-services = kubernetesbuilddeploy kubernetesdeployqueue kubernetesbuilddeploymonitor kubernetesremove tests-kubernetes local-dbaas-provider
 
 # List of Lagoon Services needed for webhook endpoint testing
 webhooks-test-services = webhook-handler webhooks2tasks
@@ -966,21 +965,21 @@ endif
 
 # Symlink the installed k3d client if the correct version is already
 # installed, otherwise downloads it.
-local-dev/k3d:
-ifeq ($(K3D_VERSION), $(shell k3d version 2>/dev/null | grep k3d | sed -E 's/^k3d version v([0-9.]+).*/\1/'))
-	$(info linking local k3d version $(K3D_VERSION))
-	ln -s $(shell command -v k3d) ./local-dev/k3d
+local-dev/kind:
+ifeq ($(KIND_VERSION), $(shell kind version 2>/dev/null | grep kind | sed -E 's/^kind v([0-9.]+).*/\1/'))
+	$(info linking local kind version $(KIND_VERSION))
+	ln -s $(shell command -v kind) ./local-dev/kind
 else
-	$(info downloading k3d version $(K3D_VERSION) for $(ARCH))
-	curl -Lo local-dev/k3d https://github.com/rancher/k3d/releases/download/v$(K3D_VERSION)/k3d-$(ARCH)-amd64
-	chmod a+x local-dev/k3d
+	$(info downloading kind version $(KIND_VERSION) for $(ARCH))
+	curl -Lo local-dev/kind https://github.com/kubernetes-sigs/kind/releases/download/v$(KIND_VERSION)/kind-$(ARCH)-amd64
+	chmod +x local-dev/kind
 endif
 
 # Symlink the installed kubectl client if the correct version is already
 # installed, otherwise downloads it.
 local-dev/kubectl:
 ifeq ($(KUBECTL_VERSION), $(shell kubectl version --short --client 2>/dev/null | sed -E 's/Client Version: v([0-9.]+).*/\1/'))
-	$(info linking local kubectl version $(K3D_VERSION))
+	$(info linking local kubectl version $(KUBECTL_VERSION))
 	ln -s $(shell command -v kubectl) ./local-dev/kubectl
 else
 	$(info downloading kubectl version $(KUBECTL_VERSION) for $(ARCH))
@@ -988,40 +987,47 @@ else
 	chmod a+x local-dev/kubectl
 endif
 
-k3d: local-dev/k3d local-dev/kubectl build/docker-host
-	$(info starting k3d with name $(K3D_NAME))
-	$(info Creating Loopback Interface for docker gateway if it does not exist, this might ask for sudo)
-ifeq ($(ARCH), darwin)
-	if ! ifconfig lo0 | grep $$(docker network inspect bridge --format='{{(index .IPAM.Config 0).Gateway}}') -q; then sudo ifconfig lo0 alias $$(docker network inspect bridge --format='{{(index .IPAM.Config 0).Gateway}}'); fi
+kind: local-dev/kind local-dev/kubectl build/docker-host
+ifeq ($(shell ./local-dev/kind get clusters 2>/dev/null | grep $(KIND_NAME)), $(KIND_NAME))
+	$(info kind cluster $(KIND_NAME) already exists)
+else
+	$(info starting kind cluster with name $(KIND_NAME))
+	./local-dev/kind create cluster --wait 0 \
+	--config ./local-dev/kind-config.yaml \
+	--name $(KIND_NAME)
 endif
-	./local-dev/k3d create --wait 0 --publish 18080:80 \
-		--publish 18443:443 \
-		--api-port 16643 \
-		--name $(K3D_NAME) \
-		--image docker.io/rancher/k3s:$(K3S_VERSION) \
-		--volume $$PWD/local-dev/k3d-registries.yaml:/etc/rancher/k3s/registries.yaml \
-		-x --no-deploy=traefik \
-		--volume $$PWD/local-dev/k3d-nginx-ingress.yaml:/var/lib/rancher/k3s/server/manifests/k3d-nginx-ingress.yaml
-	export KUBECONFIG="$$(./local-dev/k3d get-kubeconfig --name='$(K3D_NAME)')"; \
+
+# 	$(info Creating Loopback Interface for docker gateway if it does not exist, this might ask for sudo)
+# ifeq ($(ARCH), darwin)
+#     if ! ifconfig lo0 | grep $$(docker network inspect bridge --format='{{(index .IPAM.Config 0).Gateway}}') -q; then sudo ifconfig lo0 alias $$(docker network inspect bridge --format='{{(index .IPAM.Config 0).Gateway}}'); fi
+# endif
+
+	# create local registry container
+	./local-dev/kind-local-registry.sh $(KIND_NAME)
+
+	export KUBECONFIG="$(./local-dev/kind get kubeconfig-path --name="$(KIND_NAME)")"; \
 	docker tag $(CI_BUILD_TAG)/docker-host localhost:5000/lagoon/docker-host; \
 	docker push localhost:5000/lagoon/docker-host; \
+
+	# create ingress controller
+	./local-dev/kind-ingress-controller.sh
+
 	local-dev/kubectl create namespace lagoon; \
 	local-dev/kubectl -n lagoon create -f kubernetes-setup/sa-kubernetesbuilddeploy.yaml; \
 	local-dev/kubectl -n lagoon create -f kubernetes-setup/priorityclasses.yaml; \
-	local-dev/kubectl -n lagoon create -f kubernetes-setup/k3d-docker-host.yaml; \
+	local-dev/kubectl -n lagoon create -f kubernetes-setup/kind-docker-host.yaml; \
 	local-dev/kubectl -n lagoon create -f kubernetes-setup/sa-lagoon-deployer.yaml; \
 	local-dev/kubectl -n lagoon create -f kubernetes-setup/role-mariadb-operator.yaml; \
 	local-dev/kubectl -n dbaas-operator-system create -f kubernetes-setup/dbaas-operator.yaml; \
 	local-dev/kubectl -n lagoon create -f kubernetes-setup/dbaas-providers.yaml; \
 	local-dev/kubectl -n lagoon rollout status deployment docker-host -w;
+
 ifeq ($(ARCH), darwin)
-	export KUBECONFIG="$$(./local-dev/k3d get-kubeconfig --name='$(K3D_NAME)')"; \
 	KUBERNETESBUILDDEPLOY_TOKEN=$$(local-dev/kubectl -n lagoon describe secret $$(local-dev/kubectl -n lagoon get secret | grep kubernetesbuilddeploy | awk '{print $$1}') | grep token: | awk '{print $$2}'); \
 	sed -i '' -e "s/\".*\" # make-kubernetes-token/\"$${KUBERNETESBUILDDEPLOY_TOKEN}\" # make-kubernetes-token/g" local-dev/api-data/03-populate-api-data-kubernetes.gql; \
 	DOCKER_IP="$$(docker network inspect bridge --format='{{(index .IPAM.Config 0).Gateway}}')"; \
 	sed -i '' -e "s/172\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}/$${DOCKER_IP}/g" local-dev/api-data/03-populate-api-data-kubernetes.gql docker-compose.yaml;
 else
-	export KUBECONFIG="$$(./local-dev/k3d get-kubeconfig --name='$(K3D_NAME)')"; \
 	KUBERNETESBUILDDEPLOY_TOKEN=$$(local-dev/kubectl -n lagoon describe secret $$(local-dev/kubectl -n lagoon get secret | grep kubernetesbuilddeploy | awk '{print $$1}') | grep token: | awk '{print $$2}'); \
 	sed -i "s/\".*\" # make-kubernetes-token/\"$${KUBERNETESBUILDDEPLOY_TOKEN}\" # make-kubernetes-token/g" local-dev/api-data/03-populate-api-data-kubernetes.gql; \
 	DOCKER_IP="$$(docker network inspect bridge --format='{{(index .IPAM.Config 0).Gateway}}')"; \
@@ -1040,11 +1046,11 @@ rebuild-push-kubectl-build-deploy-dind:
 	rm -rf build/kubectl-build-deploy-dind
 	$(MAKE) push-kubectl-build-deploy-dind
 
-k3d-kubeconfig:
-	export KUBECONFIG="$$(./local-dev/k3d get-kubeconfig --name='$(K3D_NAME)')"
+kind-kubeconfig:
+	export KUBECONFIG="$$(./local-dev/kind get kubeconfig-path --name="$(KIND_NAME)")"
 
-k3d-dashboard:
-	export KUBECONFIG="$$(./local-dev/k3d get-kubeconfig --name='$(K3D_NAME)')"; \
+kind-dashboard:
+	export KUBECONFIG="$$(./local-dev/kind get kubeconfig-path --name='$(KIND_NAME)')"; \
 	local-dev/kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0-rc2/aio/deploy/recommended.yaml; \
 	local-dev/kubectl -n kubernetes-dashboard rollout status deployment kubernetes-dashboard -w; \
 	echo -e "\nUse this token:"; \
@@ -1060,17 +1066,16 @@ k8s-dashboard:
 	open http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/ ; \
 	kubectl proxy
 
-# Stop k3d
-.PHONY: k3d/stop
-k3d/stop: local-dev/k3d
-	./local-dev/k3d delete --name $(K3D_NAME) || true
-	rm -f k3d
+# Stop kind
+.PHONY: kind/stop
+kind/stop: local-dev/kind
+	./local-dev/kind delete cluster --name $(KIND_NAME) || true
+	rm -f kind
 
-# Stop All k3d
-.PHONY: k3d/stopall
-k3d/stopall: local-dev/k3d
-	./local-dev/k3d delete --all || true
-	rm -f k3d
+# Stop kind, remove downloaded kind
+.PHONY: kind/clean
+kindd/clean: kind/stop
+	rm -rf ./local-dev/kind
 
 # Stop k3d, remove downloaded k3d
 .PHONY: k3d/clean

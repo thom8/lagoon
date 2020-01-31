@@ -9,6 +9,7 @@ local-dev/oc
 minishift
 minikube
 k3d
+kind
 kubectl
 **/v8-*
 node_modules/

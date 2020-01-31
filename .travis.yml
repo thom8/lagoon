@@ -1,0 +1,12 @@
+sudo: required
+language: go
+go:
+    - "1.12"
+
+services:
+  - docker
+
+install: true
+
+script:
+  - make k8s-tests
