@@ -1,0 +1,11 @@
+extends: default
+
+ignore: |
+  docs/
+
+rules:
+  line-length:
+    max: 80
+    level: warning
+  indentation:
+    indent-sequences: whatever
