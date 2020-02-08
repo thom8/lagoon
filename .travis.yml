@@ -2,5 +2,5 @@ language: shell
 before_script:
   - pip install --user yamllint
 script:
-  # - bash -c 'shopt -s globstar nullglob; shellcheck --severity=error **/*.{sh,ksh,bash}'
+  - bash -c 'shopt -s globstar nullglob; shellcheck --severity=error **/*.{sh,ksh,bash}'
   - yamllint --no-warnings .
